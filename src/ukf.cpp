@@ -69,6 +69,21 @@ UKF::UKF() {
 
   //predited sigma points 
   Xsig_pred_ = MatrixXd(n_x_, 2 * n_aug_ + 1);
+
+  // Define spreading parameter
+  lambda_ = 3 - n_aug_;
+
+    //init weights 
+  weights_ = VectorXd(2*n_aug_+1);
+
+  //Quality of the approximation: NIS calc Radar
+  NIS_radar = 0.00;
+
+  //Quality of the approximation: NIS calc Lidar
+  NIS_lidar = 0.00;
+
+  // Start time
+  time_us_ = 0;
 }
 
 UKF::~UKF() {}
