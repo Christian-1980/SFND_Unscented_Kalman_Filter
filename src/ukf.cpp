@@ -59,9 +59,10 @@ UKF::UKF() {
   initialized_ = false;
 
   // definition of the state vectors dimensions: 2 positions, 3 velocitties
-  n_x_ = 5;
+  // depends on the model chosen: CTRV
+  n_x_ = 5; 
 
-  // augmented state dimension: addining 2 more
+  // augmented state dimension: addining 2 more coming from noise vector
   n_aug_ = 7;
 
   // augmented sigma points 
@@ -171,6 +172,40 @@ void UKF::Prediction(double delta_t) {
    * Modify the state vector, x_. Predict sigma points, the state, 
    * and the state covariance matrix.
    */
+
+   // 1. initalize the augmented state vector
+    VectorXd x_aug = VectorXd(n_aug_); 
+   
+    // 2. init the augmented covariance
+    MatrixXd P_aug = MatrixXd(n_aug_, n_aug_);
+
+    // 3. fill the state
+    x_aug.head(5) = x_;
+    x_aug(5) = 0;
+    x_aug(6) = 0;
+
+    // 4. fill the covariance
+    // lazy implementation to set it all to default value of 0
+    P_aug.topLeftCorner(5,5) = P_;
+    P_aug(5,5) = std_a_*std_a_;
+    P_aug(5,6) = 0.0;
+    P_aug(6,6) = std_yawdd_*std_yawdd_;
+    P_aug(6,5) = 0.0;
+
+    // 5. calculate square root matrix
+    MatrixXd A = P_aug.llt().matrixL();
+
+    // 6. create augmented sigma points add its values
+    
+    //1st is the x_aug
+    Xsig_aug_.col(0) = x_aug ; 
+    
+    //next to be calculated by applying the above
+    for(int i = 0 ; i < n_aug_ ; ++i)
+    {
+      Xsig_aug_.col(i+1) = x_aug + sqrt(lambda_ + n_aug_)*A.col(i) ;
+      Xsig_aug_.col(i+1+n_aug_) = x_aug - sqrt(lambda_ + n_aug_)*A.col(i) ;
+    }
 }
 
 void UKF::UpdateLidar(MeasurementPackage meas_package) {
