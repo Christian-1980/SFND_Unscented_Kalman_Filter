@@ -289,20 +289,169 @@ void UKF::Prediction(double delta_t) {
 
 }
 
+// Helper function to normalize an angle to be within [-PI, PI]
+void NormalizeAngle(double& angle) {
+    while (angle > M_PI) {
+        angle -= 2. * M_PI;
+    }
+    while (angle < -M_PI) {
+        angle += 2. * M_PI;
+    }
+}
+
 void UKF::UpdateLidar(MeasurementPackage meas_package) {
-  /**
-   * TODO: Complete this function! Use lidar data to update the belief 
-   * about the object's position. Modify the state vector, x_, and 
-   * covariance, P_.
-   * You can also calculate the lidar NIS, if desired.
-   */
+    // Measurement dimension for Lidar (px, py)
+    const int n_z = 2;
+
+    // 1. Transform sigma points into measurement space
+    MatrixXd Zsig = Xsig_pred_.block(0, 0, n_z, 2 * n_aug_ + 1);
+    // For Lidar, px and py are directly extracted from the predicted state sigma points.
+    // If your Xsig_pred_ already has px and py in the first two rows,
+    // this block operation directly gets them. No explicit loop is needed here
+    // if Xsig_pred_ is structured such that its first two rows are px and py.
+    // If not, the original loop was correct, but you should clarify what Xsig_pred_ contains.
+
+    // 2. Calculate mean predicted measurement
+    VectorXd z_pred = Zsig * weights_;
+
+    // Calculate innovation covariance matrix S
+    MatrixXd S = MatrixXd::Zero(n_z, n_z);
+
+    for (int i = 0; i < 2 * n_aug_ + 1; ++i) {
+        VectorXd z_pred_diff = Zsig.col(i) - z_pred;
+        S += weights_(i) * z_pred_diff * z_pred_diff.transpose();
+    }
+
+    // Add measurement noise R (Lidar specific)
+    MatrixXd R = MatrixXd::Zero(n_z, n_z);
+    R(0, 0) = std_laspx_ * std_laspx_;
+    R(1, 1) = std_laspy_ * std_laspy_;
+    S += R;
+
+    // 3. Update measurement
+    // Create matrix for cross correlation Tc
+    MatrixXd Tc = MatrixXd::Zero(n_x_, n_z);
+    for (int i = 0; i < 2 * n_aug_ + 1; ++i) {
+        // Residual for measurement space (Lidar doesn't have angles that need normalization here directly)
+        VectorXd z_diff = Zsig.col(i) - z_pred;
+
+        // State difference
+        VectorXd x_diff = Xsig_pred_.col(i) - x_;
+        NormalizeAngle(x_diff(3)); // Normalize yaw angle (index 3)
+
+        Tc += weights_(i) * x_diff * z_diff.transpose();
+    }
+
+    // Kalman gain K
+    MatrixXd K = Tc * S.inverse();
+
+    // Incoming Lidar measurement
+    VectorXd z = meas_package.raw_measurements_;
+
+    // Residual between actual measurement and predicted measurement
+    VectorXd z_diff = z - z_pred;
+    // For Lidar (px, py), there's typically no angle normalization needed for z_diff.
+    // If z_diff(1) in the original code was meant to be an angle from a different sensor,
+    // that's a potential area for confusion. For Lidar, this is usually cartesian.
+    // I've removed the angle normalization for z_diff here as it's not standard for Lidar (px, py).
+    // If your 'py' measurement is somehow an angle, please clarify.
+
+    // Update state mean and covariance matrix
+    x_ = x_ + K * z_diff;
+    P_ = P_ - K * S * K.transpose();
+
+    // Calculate NIS for Lidar
+    NIS_lidar = z_diff.transpose() * S.inverse() * z_diff;
+
+    std::cout << "NIS Lidar : " << NIS_lidar << std::endl;
 }
 
 void UKF::UpdateRadar(MeasurementPackage meas_package) {
-  /**
-   * TODO: Complete this function! Use radar data to update the belief 
-   * about the object's position. Modify the state vector, x_, and 
-   * covariance, P_.
-   * You can also calculate the radar NIS, if desired.
-   */
+    // Measurement dimension for Radar (rho, phi, rho_dot)
+    const int n_z = 3;
+
+    // Create matrix for sigma points in measurement space
+    MatrixXd Zsig = MatrixXd::Zero(n_z, 2 * n_aug_ + 1);
+
+    // 1. Transform sigma points into measurement space
+    for (int i = 0; i < 2 * n_aug_ + 1; ++i) {
+        // Extract values from predicted sigma points
+        double px = Xsig_pred_(0, i);
+        double py = Xsig_pred_(1, i);
+        double v = Xsig_pred_(2, i);
+        double yaw = Xsig_pred_(3, i);
+
+        // Calculate common terms to avoid redundant computations
+        double p_squared_sum = px * px + py * py;
+        double rho = std::sqrt(p_squared_sum);
+
+        // Avoid division by zero for rho_dot
+        if (rho < 0.0001) { // A small threshold to prevent division by zero
+            rho = 0.0001; // Set to a tiny value to proceed, though this case might need specific handling
+        }
+
+        // Measurement model: polar coordinates (rho, phi, rho_dot)
+        Zsig(0, i) = rho;                                                // r (rho)
+        Zsig(1, i) = std::atan2(py, px);                                 // phi (angle)
+        Zsig(2, i) = (px * v * std::cos(yaw) + py * v * std::sin(yaw)) / rho; // r_dot (radial velocity)
+    }
+
+    // 2. Calculate mean predicted measurement
+    VectorXd z_pred = Zsig * weights_; // More compact way to calculate weighted sum
+
+    // Normalize predicted angle for z_pred (phi)
+    NormalizeAngle(z_pred(1));
+
+    // Calculate innovation covariance matrix S
+    MatrixXd S = MatrixXd::Zero(n_z, n_z);
+    for (int i = 0; i < 2 * n_aug_ + 1; ++i) {
+        // Difference
+        VectorXd z_pred_diff = Zsig.col(i) - z_pred;
+
+        // Angle normalization for phi in the residual
+        NormalizeAngle(z_pred_diff(1));
+
+        S += weights_(i) * z_pred_diff * z_pred_diff.transpose();
+    }
+
+    // Add measurement noise R (Radar specific)
+    MatrixXd R = MatrixXd::Zero(n_z, n_z);
+    R(0, 0) = std_radr_ * std_radr_;
+    R(1, 1) = std_radphi_ * std_radphi_;
+    R(2, 2) = std_radrd_ * std_radrd_;
+    S += R;
+
+    // 3. Update measurement
+    // Create matrix for cross correlation Tc
+    MatrixXd Tc = MatrixXd::Zero(n_x_, n_z);
+    for (int i = 0; i < 2 * n_aug_ + 1; ++i) {
+        // Residual for measurement space
+        VectorXd z_diff = Zsig.col(i) - z_pred;
+        NormalizeAngle(z_diff(1)); // Angle normalization for phi
+
+        // State difference
+        VectorXd x_diff = Xsig_pred_.col(i) - x_;
+        NormalizeAngle(x_diff(3)); // Angle normalization for yaw
+
+        Tc += weights_(i) * x_diff * z_diff.transpose();
+    }
+
+    // Kalman gain K
+    MatrixXd K = Tc * S.inverse();
+
+    // Incoming radar measurement
+    VectorXd z = meas_package.raw_measurements_;
+
+    // Residual between actual measurement and predicted measurement
+    VectorXd z_diff = z - z_pred;
+    NormalizeAngle(z_diff(1)); // Angle normalization for phi
+
+    // Update state mean and covariance matrix
+    x_ = x_ + K * z_diff;
+    P_ = P_ - K * S * K.transpose();
+
+    // Calculate NIS for radar
+    NIS_radar = z_diff.transpose() * S.inverse() * z_diff;
+
+    std::cout << "NIS Radar : " << NIS_radar << std::endl;
 }
