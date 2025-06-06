@@ -115,7 +115,24 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     }
     else if (meas_package.sensor_type_ == MeasurementPackage::RADAR)
     {
+      // Get the measured data for the three dimensions
+      double rho = meas_package.raw_measurements_(0);
+      double phi = meas_package.raw_measurements_(1);
+      double rho_dot = meas_package.raw_measurements_(2);
 
+      // convert it into catresian coordinates
+      double x = rho*sin(phi);
+      double y = rho*cos(phi);
+
+      // Init state vector
+      x_ << x,y,rho_dot,phi,0;
+
+      // Init co-variance matrix based on sensor accuracy
+      P_ << std_radr_*std_radr_,0,0,0,0,
+      0,std_radr_*std_radr_,0,0,0,
+      0,0,std_radr_*std_radr_,0,0,
+      0,0,0,std_radphi_*std_radphi_,0,
+      0,0,0,0,1;
     }
 
     // Set Initialization to true
