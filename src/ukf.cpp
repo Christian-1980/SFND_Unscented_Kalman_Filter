@@ -64,7 +64,11 @@ UKF::UKF() {
   // augmented state dimension: addining 2 more
   n_aug_ = 7;
 
+  // augmented sigma points 
+  Xsig_aug_ = MatrixXd(n_aug_, 2 * n_aug_ + 1);
 
+  //predited sigma points 
+  Xsig_pred_ = MatrixXd(n_x_, 2 * n_aug_ + 1);
 }
 
 UKF::~UKF() {}
