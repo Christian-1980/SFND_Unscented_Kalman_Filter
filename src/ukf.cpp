@@ -143,6 +143,26 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 
     return ;
   }
+
+  // measurement of time delta
+  double delta_t = (meas_package.timestamp_ - time_us_)/1000000.0;
+
+  // new time
+  time_us_ = meas_package.timestamp_;
+
+  // do the prediction
+  Prediction(delta_t);
+
+  // do the update
+  if(meas_package.sensor_type_==MeasurementPackage::LASER)
+  {
+    UpdateLidar(meas_package);
+  }
+  else if(meas_package.sensor_type_==MeasurementPackage::RADAR)
+  {
+    UpdateRadar(meas_package);
+  }
+
 }
 
 void UKF::Prediction(double delta_t) {
