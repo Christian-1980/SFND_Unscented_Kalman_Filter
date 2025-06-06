@@ -246,13 +246,47 @@ void UKF::Prediction(double delta_t) {
       yaw_p = yaw_p + 0.5*delta_t*delta_t*nu_yawdd;
       yawd_p = yawd_p + delta_t*nu_yawdd ; 
   
-      // write predicted sigma points into right column
+      // prediction for the new state which has only physical properties (5 values) at the sigma points
       Xsig_pred_(0,i) = px_p;
       Xsig_pred_(1,i) = py_p;
       Xsig_pred_(2,i) = v_p;
       Xsig_pred_(3,i) = yaw_p;
       Xsig_pred_(4,i) = yawd_p;
     }
+  
+  // MEAN AND COVARIANCE for all results from the prediction step
+    
+     // set weights for the backward propagation into the mean and covariance
+     // first position
+     double weight_0 = lambda_/(lambda_+n_aug_);
+     weights_(0) = weight_0;
+     // rest of the weights
+     for(int i=1 ; i<2*n_aug_+1;++i)
+     {
+       weights_(i) = 0.5/(lambda_+n_aug_) ;
+     }
+   
+     // predict state mean
+     x_.fill(0.0) ; 
+     for(int i=0 ; i<2*n_aug_+1;++i)
+     {
+       x_ = x_ + weights_(i)*Xsig_pred_.col(i);
+     }
+   
+     // predict state covariance matrix
+     P_.fill(0.0);
+     for(int i=0 ; i<2*n_aug_+1;++i)
+     {
+       //state difference
+       VectorXd x_diff = Xsig_pred_.col(i) - x_ ;
+       // angle normalization like mentioned in the solution of the lesson
+       // M_PI is in C++ the number Pi
+       while (x_diff(3)> M_PI) x_diff(3)-=2.*M_PI;
+       while (x_diff(3)<-M_PI) x_diff(3)+=2.*M_PI;
+   
+       P_ = P_ + weights_(i) * x_diff * x_diff.transpose() ; 
+     }
+
 }
 
 void UKF::UpdateLidar(MeasurementPackage meas_package) {
