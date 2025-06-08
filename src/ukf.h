@@ -43,7 +43,7 @@ class UKF {
 
 
   // initially set to false, set to true in first call of ProcessMeasurement
-  bool is_initialized_;
+  bool initialized_;
 
   // if this is false, laser measurements will be ignored (except for init)
   bool use_laser_;
@@ -56,6 +56,9 @@ class UKF {
 
   // state covariance matrix
   Eigen::MatrixXd P_;
+
+  // predicted sigma points matrix
+  Eigen::MatrixXd Xsig_aug_;
 
   // predicted sigma points matrix
   Eigen::MatrixXd Xsig_pred_;
@@ -95,6 +98,10 @@ class UKF {
 
   // Sigma point spreading parameter
   double lambda_;
+
+  double NIS_radar;
+  
+  double NIS_lidar;
 };
 
 #endif  // UKF_H

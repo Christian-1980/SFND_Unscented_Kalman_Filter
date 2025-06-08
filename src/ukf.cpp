@@ -1,3 +1,4 @@
+#include <iostream>
 #include "ukf.h"
 #include "Eigen/Dense"
 
@@ -95,7 +96,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
    * measurements.
    */
   //first measument for initialisation of state and covariance matrices
-  if(!is_initialized_)
+  if(!initialized_)
   {
     if(meas_package.sensor_type_ == MeasurementPackage::LASER)
     {
@@ -137,7 +138,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     }
 
     // Set Initialization to true
-    is_initialized_ = true;
+    initialized_ = true;
 
     // Get time 
     time_us_ = meas_package.timestamp_;
